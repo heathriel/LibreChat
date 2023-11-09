@@ -8,9 +8,16 @@ const axios = require('axios').default;
  * @property {string} azureOpenAIApiVersion - The Azure OpenAI API version.
  */
 
+/**
+ * Generates the Azure OpenAI API endpoint URL.
+ * @param {Object} params - The parameters object.
+ * @param {string} params.azureOpenAIApiInstanceName - The Azure OpenAI API instance name.
+ * @param {string} params.azureOpenAIApiDeploymentName - The Azure OpenAI API deployment name.
+ * @returns {string} The complete endpoint URL for the Azure OpenAI API.
+ */
 const genAzureEndpoint = ({ azureOpenAIApiInstanceName, azureOpenAIApiDeploymentName }) => {
-  if (!azureOpenAIApiDeploymentName) {
-    throw new Error('Deployment name must be provided.');
+  if (!azureOpenAIApiInstanceName || !azureOpenAIApiDeploymentName) {
+    throw new Error('Azure OpenAI API instance name and deployment name must be provided.');
   }
   
   return `https://${azureOpenAIApiInstanceName}.openai.azure.com/openai/deployments/${azureOpenAIApiDeploymentName}`;
@@ -22,7 +29,6 @@ const genAzureEndpoint = ({ azureOpenAIApiInstanceName, azureOpenAIApiDeployment
  * @returns {string} The sanitized model name.
  */
 const sanitizeModelName = (modelName) => {
-  // Replace periods with empty strings and other disallowed characters as needed
   return modelName.replace(/\./g, '');
 };
 
@@ -31,26 +37,17 @@ const sanitizeModelName = (modelName) => {
  * @param {AzureCredentials} credentials - The Azure credentials.
  * @returns {string} The complete chat completion endpoint URL for the Azure OpenAI API.
  */
-
-
 const genAzureChatCompletion = (credentials) => {
   const { azureOpenAIApiInstanceName, azureOpenAIApiDeploymentName, azureOpenAIApiVersion } = credentials;
-  if (!azureOpenAIApiDeploymentName) {
-    throw new Error('Deployment name must be provided.');
-  }
-
-  // Generate the endpoint URL for the Azure OpenAI API chat completion
-  const endpoint = `https://${azureOpenAIApiInstanceName}.openai.azure.com/openai/deployments/${azureOpenAIApiDeploymentName}/chat/completions?api-version=${azureOpenAIApiVersion}`;
-  console.log(`Generated Endpoint: ${endpoint}`); // Log the generated endpoint for debugging
+  const endpoint = `${genAzureEndpoint({ azureOpenAIApiInstanceName, azureOpenAIApiDeploymentName })}/chat/completions?api-version=${azureOpenAIApiVersion}`;
+  console.log(`Generated Endpoint: ${endpoint}`);
   return endpoint;
 };
 
 /**
  * Retrieves the Azure OpenAI API credentials from environment variables.
- * Ensures that all required environment variables are set.
  * @returns {AzureCredentials} An object containing the Azure OpenAI API credentials.
  */
-
 const getAzureCredentials = () => {
   const credentials = {
     azureOpenAIApiKey: process.env.AZURE_API_KEY,
@@ -59,12 +56,11 @@ const getAzureCredentials = () => {
     azureOpenAIApiVersion: process.env.AZURE_OPENAI_API_VERSION,
   };
 
-  // Check for missing environment variables and log an error if any are missing
   if (!credentials.azureOpenAIApiKey || !credentials.azureOpenAIApiInstanceName || !credentials.azureOpenAIApiDeploymentName || !credentials.azureOpenAIApiVersion) {
     console.error('One or more environment variables are missing or invalid:', credentials);
     throw new Error('Invalid environment configuration.');
   }
-
+  
   return credentials;
 };
 
@@ -73,36 +69,29 @@ const getAzureCredentials = () => {
  * @param {Object} message - The message payload for the chat API.
  * @returns {Promise<Object>} The response from the Azure OpenAI API.
  */
-
 const sendChatMessage = async (message) => {
-  const credentials = getAzureCredentials(); // Retrieve the API credentials
-  const endpoint = genAzureChatCompletion(credentials); // Generate the API endpoint URL
+  const credentials = getAzureCredentials();
+  const endpoint = genAzureChatCompletion(credentials);
 
   try {
-    // Make the HTTP POST request to the Azure OpenAI API
     const response = await axios.post(endpoint, message, {
       headers: {
         'Content-Type': 'application/json',
-        'api-key': credentials.azureOpenAIApiKey
+        'Authorization': `Bearer ${credentials.azureOpenAIApiKey}`, // Updated to use Bearer token
       }
     });
 
-    console.log('Response:', response.data); // Log the response data for debugging
+    console.log('Response:', response.data);
     return response.data;
   } catch (error) {
-    // Log the error details if the request fails
-    console.error('Error sending chat message:', error.message);
+    console.error('Error sending chat message:', error.response ? error.response.data : error.message);
     if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
       console.error(error.response.data);
       console.error(error.response.status);
       console.error(error.response.headers);
     } else if (error.request) {
-      // The request was made but no response was received
       console.error(error.request);
     } else {
-      // Something happened in setting up the request that triggered an Error
       console.error('Error', error.message);
     }
     throw error;
